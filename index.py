@@ -33,7 +33,8 @@ DEFAULT_CONFIG = {
     "TO_EMAIL": "xxx@gmail.com",
     "FROM_EMAIL": "xxx@gmail.com",
     "EMAIL_PASSWORD": "xxxx xxxx xxxx xxxx", # https://myaccount.google.com/apppasswords
-    "PAUSE_KEY": "q", # for AutoHotKey (spammingQ.ahk). This will press the PAUSE_KEY when the ocr_monitor stop
+    "ENABLE_AUTOHOTKEY": True, # for AutoHotKey (spammingQ.ahk).
+    "SPAM_KEY": "q", # for AutoHotKey (spammingQ.ahk). This will press the SPAM_KEY when the ocr_monitor stop
 }
 
 
@@ -83,7 +84,7 @@ def signal_handler(signum, frame):
             print("Commands:")
             print("  Ctrl+C - Resume")
             print("  Ctrl+C twice - Exit")
-            print("  C + Enter - Edit all settings")
+            print("  A + Enter - Edit all settings")
             print("  R + Enter - Edit monitor regions")
             print("  M + Enter - Edit monitor settings")
             print("  E + Enter - Edit email settings")
@@ -108,6 +109,20 @@ def get_config_path():
         return Path(os.path.dirname(sys.executable)) / "config.json"
     else:
         return Path(__file__).parent / "config.json"
+
+
+def get_models_path():
+    """Get path to store EasyOCR models."""
+    if getattr(sys, 'frozen', False):
+        # When running as executable, store models next to the executable
+        models_dir = Path(os.path.dirname(sys.executable)) / "easyocr_models"
+    else:
+        # When running as script, use the script directory
+        models_dir = Path(__file__).parent / "easyocr_models"
+    
+    # Create directory if it doesn't exist
+    models_dir.mkdir(parents=True, exist_ok=True)
+    return str(models_dir)
 
 
 def load_config():
@@ -338,9 +353,15 @@ def edit_monitor_config(save_after=True):
     interval = input(f"Check interval (seconds) [{config['INTERVAL']}]: ").strip()
     if interval.isdigit():
         config['INTERVAL'] = int(interval)
-    pause_key = input(f"Pause key (default 'q') [{config['PAUSE_KEY']}]: ").strip()
-    if pause_key:
-        config['PAUSE_KEY'] = pause_key
+    enable_autokey = input(f"Enable AutoHotkey (default True) (y/n): ").strip().lower()
+    if enable_autokey.lower() in ['no', 'n', 'false', '0']:
+        enable_autokey = False
+    else:
+        enable_autokey = True
+    config['ENABLE_AUTOHOTKEY'] = enable_autokey
+    if enable_autokey:
+        spam_key = input(f"Spam key (default 'q') [{config['SPAM_KEY']}]: ").strip()
+        config['SPAM_KEY'] = spam_key
     if save_after:
         save_config()
 
@@ -411,15 +432,6 @@ def edit_config_interactive():
     print("\n✓ Configuration updated!\n")
 
 
-def resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller."""
-    try:
-        base_path = sys._MEIPASS
-    except Exception:
-        base_path = os.path.abspath(".")
-    return os.path.join(base_path, relative_path)
-
-
 def advanced_preprocess(image, invert=False):
     """Advanced preprocessing specifically for low contrast text."""
     img_array = np.array(image)
@@ -433,9 +445,9 @@ def advanced_preprocess(image, invert=False):
         gray = cv2.bitwise_not(gray)
     
     height, width = gray.shape
-    gray = cv2.resize(gray, (width * 4, height * 4), interpolation=cv2.INTER_CUBIC)
+    gray = cv2.resize(gray, (width * 2, height * 2), interpolation=cv2.INTER_CUBIC)
     
-    filtered = cv2.bilateralFilter(gray, 9, 75, 75)
+    filtered = cv2.bilateralFilter(gray, 5, 50, 50)
     
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
     enhanced = clahe.apply(filtered)
@@ -451,22 +463,22 @@ def advanced_preprocess(image, invert=False):
     return Image.fromarray(cleaned)
 
 
-def capture_screen_region(x, y, w, h):
-    screenshot = ImageGrab.grab()
-    cropped = screenshot.crop((x, y, x + w, y + h))
-    return cropped
-
-
 def capture_and_ocr(x, y, w, h, debug=False):
-    img = capture_screen_region(x, y, w, h)
-
+    """Capture and perform OCR on screen region."""
+    img = ImageGrab.grab(bbox=(x, y, x + w, y + h))
     processed = advanced_preprocess(img, invert=True)
-    result = reader.readtext(np.array(processed), detail=0)
+    
+    result = reader.readtext(
+        np.array(processed), 
+        detail=0,
+        paragraph=False,
+        batch_size=1,
+    )
 
     if debug:
-        current_time = int(np.floor(cv2.getTickCount() / cv2.getTickFrequency() * 1000))
-        img.save(f"debug_cropped_{current_time}.jpg")
-        processed.save(f"debug_processed_{current_time}.jpg")
+        timestamp = int(time.time() * 1000)
+        img.save(f"debug_cropped_{timestamp}.jpg")
+        processed.save(f"debug_processed_{timestamp}.jpg")
     
     return result[0] if result else ""
 
@@ -540,6 +552,7 @@ def handle_pause_commands():
 
 
 def monitor_ocr_changes():
+    """Main monitoring loop."""
     global reader
     
     print("=" * 60)
@@ -551,7 +564,7 @@ def monitor_ocr_changes():
     print("\nControls:")
     print("  Ctrl+C once: Pause")
     print("  Ctrl+C twice: Exit")
-    print("  While paused: R=region, C=config")
+    print("  While paused: R=region, A=all, M=monitor, E=email")
     print("=" * 60 + "\n")
     
     previous_texts = [None] * len(config['REGIONS'])
@@ -575,7 +588,8 @@ def monitor_ocr_changes():
                     previous_texts[idx] = current_text
                     continue
 
-                if (region['COMPARE_MODE'] == '==' and current_text == previous_texts[idx]) or (region['COMPARE_MODE'] == '!=' and current_text != previous_texts[idx]):
+                if (region['COMPARE_MODE'] == '==' and current_text == previous_texts[idx]) or \
+                   (region['COMPARE_MODE'] == '!=' and current_text != previous_texts[idx]):
                     bad_regions.append((idx, previous_texts[idx], current_text))
                 else:
                     previous_texts[idx] = current_text
@@ -585,11 +599,12 @@ def monitor_ocr_changes():
                     print(f"[{timestamp}] ⚠️  Region {idx} changed: '{old_text}' -> '{new_text}'")
                 send_notify()
                 pause_event.clear()
-                keyboard.press_and_release(config['PAUSE_KEY'])
+                if config['ENABLE_AUTOHOTKEY'] and config['SPAM_KEY']:
+                    keyboard.press_and_release(config['SPAM_KEY'])
                 previous_texts = [None] * len(config['REGIONS'])
                 print("\n" + "="*60)
                 print("⏸️  AUTO-PAUSED after change detection")
-                print("Press Ctrl+C to resume (or R/C for settings)")
+                print("Press Ctrl+C to resume (or R/A/M/E for settings)")
                 print("="*60)
                 print("\nEnter command: ", end='', flush=True)
                 continue
@@ -598,6 +613,7 @@ def monitor_ocr_changes():
                 small_sleep(config['INTERVAL'])
         except Exception as e:
             print(f"[{timestamp}] Error: {traceback_str(e)}")
+            small_sleep(5)  # Wait before retrying after error
 
 
 if __name__ == "__main__":
@@ -610,9 +626,19 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "--config":
         edit_config_interactive()
     
-    # Initialize EasyOCR
+    # Initialize EasyOCR with persistent model storage
     print("\nInitializing EasyOCR... (this may take a moment)")
-    reader = easyocr.Reader(['en'], gpu=False, model_storage_directory=resource_path('.'))
+    models_path = get_models_path()
+    print(f"Models will be stored in: {models_path}")
+    
+    # FIXED: Use proper model storage directory that persists
+    reader = easyocr.Reader(
+        ['en'], 
+        gpu=False, 
+        model_storage_directory=models_path,
+        download_enabled=True  # Ensure models can be downloaded
+    )
+    print("✓ EasyOCR initialized successfully")
 
     # Setup signal handler for Ctrl+C
     signal.signal(signal.SIGINT, signal_handler)

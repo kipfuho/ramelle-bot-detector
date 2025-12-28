@@ -3,5 +3,7 @@ A tool for monitoring maplestory auto farm. it intervally check if the value in 
 You can use this to avoid bot detector
 
 #
+```
 .venv\Scripts\activate
 pyinstaller monitor.spec
+```
