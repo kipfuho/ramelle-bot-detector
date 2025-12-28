@@ -46,6 +46,7 @@ pause_event.set()
 ctrl_c_count = 0
 last_ctrl_c_time = 0
 reader = None
+previous_ocr_texts = {}
 
 
 def traceback_str(e: Exception):
@@ -74,7 +75,7 @@ def signal_handler(signum, frame):
     
     ctrl_c_count += 1
     last_ctrl_c_time = current_time
-    
+    previous_ocr_texts.clear() # Clear previous texts on pause/resume
     if ctrl_c_count == 1:
         stop_event.set()
         if pause_event.is_set():
@@ -567,9 +568,7 @@ def monitor_ocr_changes():
     print("  While paused: R=region, A=all, M=monitor, E=email")
     print("=" * 60 + "\n")
     
-    previous_texts = [None] * len(config['REGIONS'])
     check_count = 0
-
     while True:
         if not pause_event.is_set():
             handle_pause_commands()
@@ -578,21 +577,21 @@ def monitor_ocr_changes():
         
         check_count += 1
         timestamp = datetime.now().strftime('%H:%M:%S')
-        
+
         try:
             bad_regions = []
             for idx, region in enumerate(config['REGIONS']):
                 current_text = capture_and_ocr(region['X'], region['Y'], region['W'], region['H'])
 
-                if previous_texts[idx] is None:
-                    previous_texts[idx] = current_text
+                if not previous_ocr_texts.get(idx):
+                    previous_ocr_texts[idx] = current_text
                     continue
 
-                if (region['COMPARE_MODE'] == '==' and current_text == previous_texts[idx]) or \
-                   (region['COMPARE_MODE'] == '!=' and current_text != previous_texts[idx]):
-                    bad_regions.append((idx, previous_texts[idx], current_text))
+                if (region['COMPARE_MODE'] == '==' and current_text == previous_ocr_texts[idx]) or \
+                   (region['COMPARE_MODE'] == '!=' and current_text != previous_ocr_texts[idx]):
+                    bad_regions.append((idx, previous_ocr_texts[idx], current_text))
                 else:
-                    previous_texts[idx] = current_text
+                    previous_ocr_texts[idx] = current_text
 
             if len(bad_regions) > 0:
                 for idx, old_text, new_text in bad_regions:
@@ -601,7 +600,6 @@ def monitor_ocr_changes():
                 pause_event.clear()
                 if config['ENABLE_AUTOHOTKEY'] and config['SPAM_KEY']:
                     keyboard.press_and_release(config['SPAM_KEY'])
-                previous_texts = [None] * len(config['REGIONS'])
                 print("\n" + "="*60)
                 print("⏸️  AUTO-PAUSED after change detection")
                 print("Press Ctrl+C to resume (or R/A/M/E for settings)")
