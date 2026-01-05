@@ -1,5 +1,5 @@
 # What is this?
-A tool for monitoring maplestory auto farm. it intervally check if the value in an area change or not change (like your meso count or your mana) then notify it through email.
+A tool for monitoring maplestory auto farm. It intervally check if for cookbot and curse stage 1 then notify it through email.
 You can use this to avoid bot detector
 
 #

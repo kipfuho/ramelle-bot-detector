@@ -107,7 +107,6 @@ def perform_check(timestamp):
         elif len(loc2[0]) > 0:
             print(f"{timestamp} [ALERT] Curse detected!")
             notify(f"Time: {timestamp}\nCurse detected!")
-            pause_event.clear()
         else:
             print(f"{timestamp} [SAFE] Scanning...")
 
