@@ -65,7 +65,7 @@ def signal_handler(signum, frame):
         sys.exit(0)
 
 
-def send_notify(message):
+def notify(message):
     try:
         msg = MIMEMultipart()
         msg['From'] = cfm.config['FROM_EMAIL']
@@ -79,7 +79,7 @@ def send_notify(message):
         server.send_message(msg)
         server.quit()
         
-        print(f"✓ Email sent successfully at {datetime.now().strftime('%H:%M:%S')}\n")
+        print(f"✓ Email sent successfully at {datetime.now().strftime('%H:%M:%S')}")
         return True
     except Exception as e:
         print(f"✗ Email failed: {traceback_str(e)}")
@@ -101,13 +101,15 @@ def perform_check(timestamp):
         if len(loc[0]) > 0:
             if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
                 keyboard.press_and_release(cfm.config['SPAM_KEY'])
-            print(f"[ALERT] Cookbot detected! Time: {timestamp}")
-            send_notify(f"Time: {timestamp}\nCookbot detected!")
+            print(f"{timestamp} [ALERT] Cookbot detected!")
+            notify(f"Time: {timestamp}\nCookbot detected!")
+            pause_event.clear()
         elif len(loc2[0]) > 0:
-            print(f"[ALERT] Curse detected! Time: {timestamp}")
-            send_notify(f"Time: {timestamp}\nCurse detected!")
+            print(f"{timestamp} [ALERT] Curse detected!")
+            notify(f"Time: {timestamp}\nCurse detected!")
+            pause_event.clear()
         else:
-            print("[SAFE] Scanning...")
+            print(f"{timestamp} [SAFE] Scanning...")
 
 def main_loop():
     while True:
