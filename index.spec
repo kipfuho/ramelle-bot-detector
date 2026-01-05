@@ -24,7 +24,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='monitor',
+    name='ramelle_bot_detector',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

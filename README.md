@@ -5,5 +5,5 @@ You can use this to avoid bot detector
 #
 ```
 .venv\Scripts\activate
-pyinstaller monitor.spec
+pyinstaller index.spec
 ```

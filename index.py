@@ -30,6 +30,8 @@ last_ctrl_c_time = 0
 cookbot_template = cv2.imread(resource_path('cookbot_reference.png'), 0)
 curse_template = cv2.imread(resource_path('curse_reference.png'), 0)
 threshold = 0.8
+cookbot = False
+curse = False
 
 def small_sleep(seconds):
     end_time = time.time() + seconds
@@ -87,28 +89,35 @@ def notify(message):
 
 
 def perform_check(timestamp):
+    global cookbot, curse
     with mss.mss() as sct:
         monitor = sct.monitors[1] 
         screenshot = np.array(sct.grab(monitor))
         gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
         
-        # Match Template
         res = cv2.matchTemplate(gray_img, cookbot_template, cv2.TM_CCOEFF_NORMED)
         loc = np.where(res >= threshold)
+        if len(loc[0]) > 0:
+            print(f"{timestamp} [ALERT] Cookbot detected!")
+            if not cookbot:
+                if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
+                    keyboard.press_and_release(cfm.config['SPAM_KEY'])
+                notify(f"Time: {timestamp}\nCookbot detected!")
+                cookbot = True
+            return
+
         res2 = cv2.matchTemplate(gray_img, curse_template, cv2.TM_CCOEFF_NORMED)
         loc2 = np.where(res2 >= threshold)
-        
-        if len(loc[0]) > 0:
-            if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
-                keyboard.press_and_release(cfm.config['SPAM_KEY'])
-            print(f"{timestamp} [ALERT] Cookbot detected!")
-            notify(f"Time: {timestamp}\nCookbot detected!")
-            pause_event.clear()
-        elif len(loc2[0]) > 0:
+        if len(loc2[0]) > 0:
             print(f"{timestamp} [ALERT] Curse detected!")
-            notify(f"Time: {timestamp}\nCurse detected!")
-        else:
-            print(f"{timestamp} [SAFE] Scanning...")
+            if not curse:
+                notify(f"Time: {timestamp}\nCurse detected!")
+                curse = True
+            return
+
+        print(f"{timestamp} [SAFE] Scanning...")
+        cookbot = False
+        curse = False
 
 def main_loop():
     while True:
