@@ -18,9 +18,9 @@ DEFAULT_CONFIG = {
     "ENABLE_EMAIL": True,
     "TO_EMAIL": "xxx@gmail.com",
     "FROM_EMAIL": "xxx@gmail.com",
-    "EMAIL_PASSWORD": "xxxx xxxx xxxx xxxx", # https://myaccount.google.com/apppasswords
-    "ENABLE_AUTOHOTKEY": True, # for AutoHotKey (spammingQ.ahk).
-    "SPAM_KEY": "[+1", # for AutoHotKey (remelle_macro.ahk).
+    "EMAIL_PASSWORD": "xxxx xxxx xxxx xxxx",  # https://myaccount.google.com/apppasswords
+    "ENABLE_AUTOHOTKEY": True,  # for AutoHotKey (spammingQ.ahk).
+    "SPAM_KEY": "[+1",  # for AutoHotKey (remelle_macro.ahk).
 }
 
 stop_event = Event()
@@ -28,11 +28,7 @@ pause_event = Event()
 pause_event.set()
 ctrl_c_count = 0
 last_ctrl_c_time = 0
-cookbot_template = cv2.imread(resource_path('cookbot_reference.png'), 0)
-curse_template = cv2.imread(resource_path('curse_reference.png'), 0)
-threshold = 0.8
-cookbot = False
-curse = False
+
 
 def small_sleep(seconds):
     end_time = time.time() + seconds
@@ -45,12 +41,12 @@ def small_sleep(seconds):
 
 def signal_handler(signum, frame):
     global ctrl_c_count, last_ctrl_c_time
-    
+
     current_time = time.time()
-    
+
     if current_time - last_ctrl_c_time > 1:
         ctrl_c_count = 0
-    
+
     ctrl_c_count += 1
     last_ctrl_c_time = current_time
     if ctrl_c_count == 1:
@@ -71,17 +67,17 @@ def signal_handler(signum, frame):
 def notify(message):
     try:
         msg = MIMEMultipart()
-        msg['From'] = cfm.config['FROM_EMAIL']
-        msg['To'] = cfm.config['TO_EMAIL']
-        msg['Subject'] = "Ramelle Monitor Alert: Text Changed"
-        msg.attach(MIMEText(message, 'plain'))
-        
-        server = smtplib.SMTP('smtp.gmail.com', 587)
+        msg["From"] = cfm.config["FROM_EMAIL"]
+        msg["To"] = cfm.config["TO_EMAIL"]
+        msg["Subject"] = "Ramelle Monitor Alert: Text Changed"
+        msg.attach(MIMEText(message, "plain"))
+
+        server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
-        server.login(cfm.config['FROM_EMAIL'], cfm.config['EMAIL_PASSWORD'])
+        server.login(cfm.config["FROM_EMAIL"], cfm.config["EMAIL_PASSWORD"])
         server.send_message(msg)
         server.quit()
-        
+
         print(f"✓ Email sent successfully at {datetime.now().strftime('%H:%M:%S')}")
         return True
     except Exception as e:
@@ -89,46 +85,58 @@ def notify(message):
         return False
 
 
+reference_templates = [
+    {
+        "name": "Cookbot",
+        "image": cv2.imread(resource_path("cookbot_reference.png"), 0),
+        "threshold": 0.8,
+        "detected": False,
+        "extra": lambda: (
+            keyboard.press_and_release(cfm.config["SPAM_KEY"])
+            if cfm.config["ENABLE_AUTOHOTKEY"] and cfm.config["SPAM_KEY"]
+            else None
+        ),
+    },
+    {
+        "name": "Curse",
+        "image": cv2.imread(resource_path("curse_reference.png"), 0),
+        "threshold": 0.8,
+        "detected": False,
+        "extra": lambda: None,
+    },
+]
+
+
 def perform_check(timestamp):
-    global cookbot, curse
     try:
+        print(f"{timestamp} [INFO] Performing check...")
         with mss.mss() as sct:
-            monitor = sct.monitors[1] 
+            monitor = sct.monitors[1]
             sct_img = sct.grab(monitor)
             screenshot = np.array(sct_img)
             gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
             del sct_img, screenshot
 
-            res = cv2.matchTemplate(gray_img, cookbot_template, cv2.TM_CCOEFF_NORMED)
-            loc = np.where(res >= threshold)
-            if len(loc[0]) > 0:
-                print(f"{timestamp} [ALERT] Cookbot detected!")
-                if not cookbot:
-                    if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
-                        keyboard.press_and_release(cfm.config['SPAM_KEY'])
-                    notify(f"Time: {timestamp}\nCookbot detected!")
-                    cookbot = True
-                del res, gray_img
-                return
-
-            res2 = cv2.matchTemplate(gray_img, curse_template, cv2.TM_CCOEFF_NORMED)
-            loc2 = np.where(res2 >= threshold)
-            if len(loc2[0]) > 0:
-                print(f"{timestamp} [ALERT] Curse detected!")
-                if not curse:
-                    notify(f"Time: {timestamp}\nCurse detected!")
-                    curse = True
-                del res2, gray_img
-                return
-
-            print(f"{timestamp} [SAFE] Scanning...")
-            cookbot = False
-            curse = False
-            del res, res2, gray_img
+            for temp in reference_templates:
+                threshold = temp["threshold"]
+                res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
+                loc = np.where(res >= threshold)
+                if len(loc[0]) > 0:
+                    print(f"[ALERT] {temp['name']} detected!")
+                    if not temp["detected"]:
+                        temp["extra"]()
+                        notify(f"Time: {timestamp}\n{temp['name']} detected!")
+                        temp["detected"] = True
+                    del res, gray_img
+                    break
+            else:
+                for temp in reference_templates:
+                    temp["detected"] = False
     except Exception as e:
         print(f"Check Error: {traceback_str(e)}")
     finally:
-        gc.collect() 
+        gc.collect()
+
 
 def main_loop():
     while True:
@@ -137,9 +145,9 @@ def main_loop():
             continue
 
         try:
-            timestamp = datetime.now().strftime('%H:%M:%S')
+            timestamp = datetime.now().strftime("%H:%M:%S")
             perform_check(timestamp)
-            time.sleep(cfm.config['INTERVAL'])
+            time.sleep(cfm.config["INTERVAL"])
         except Exception as e:
             print(f"Error during monitoring: {traceback_str(e)}")
             small_sleep(5)
@@ -148,5 +156,7 @@ def main_loop():
 if __name__ == "__main__":
     cfm = ConfigManager("config.json", DEFAULT_CONFIG)
     signal.signal(signal.SIGINT, signal_handler)
-    print("🛡️  Ramelle Bot Detector Started. Press Ctrl+C to pause/resume, double Ctrl+C to exit.")
+    print(
+        "🛡️  Ramelle Bot Detector Started. Press Ctrl+C to pause/resume, double Ctrl+C to exit."
+    )
     main_loop()
