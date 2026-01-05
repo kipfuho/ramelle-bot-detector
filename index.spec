@@ -6,7 +6,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('cookbot_reference.png', '.'), 
-        ('curse_reference.png', '.')
+        ('curse_reference.png', '.'),
+        ('dead_reference.png', '.')
     ],
     hiddenimports=[],
     hookspath=[],

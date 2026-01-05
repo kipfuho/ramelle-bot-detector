@@ -90,6 +90,7 @@ reference_templates = [
         "name": "Cookbot",
         "image": cv2.imread(resource_path("cookbot_reference.png"), 0),
         "threshold": 0.8,
+        "interval_multiplier": 1,
         "detected": False,
         "extra": lambda: (
             keyboard.press_and_release(cfm.config["SPAM_KEY"])
@@ -101,13 +102,22 @@ reference_templates = [
         "name": "Curse",
         "image": cv2.imread(resource_path("curse_reference.png"), 0),
         "threshold": 0.8,
+        "interval_multiplier": 5,
+        "detected": False,
+        "extra": lambda: None,
+    },
+    {
+        "name": "Dead",
+        "image": cv2.imread(resource_path("dead_reference.png"), 0),
+        "threshold": 0.8,
+        "interval_multiplier": 5,
         "detected": False,
         "extra": lambda: None,
     },
 ]
 
 
-def perform_check(timestamp):
+def perform_check(timestamp, current_count):
     try:
         print(f"{timestamp} [INFO] Performing check...")
         with mss.mss() as sct:
@@ -118,11 +128,13 @@ def perform_check(timestamp):
             del sct_img, screenshot
 
             for temp in reference_templates:
+                if current_count % temp["interval_multiplier"] != 0:
+                    continue
                 threshold = temp["threshold"]
                 res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
                 loc = np.where(res >= threshold)
                 if len(loc[0]) > 0:
-                    print(f"[ALERT] {temp['name']} detected!")
+                    print(f"✗ {temp['name']} detected!")
                     if not temp["detected"]:
                         temp["extra"]()
                         notify(f"Time: {timestamp}\n{temp['name']} detected!")
@@ -130,6 +142,7 @@ def perform_check(timestamp):
                     del res, gray_img
                     break
             else:
+                print(f"✓ No issues detected.")
                 for temp in reference_templates:
                     temp["detected"] = False
     except Exception as e:
@@ -139,6 +152,7 @@ def perform_check(timestamp):
 
 
 def main_loop():
+    cnt = 0
     while True:
         if not pause_event.is_set():
             small_sleep(5)
@@ -146,11 +160,13 @@ def main_loop():
 
         try:
             timestamp = datetime.now().strftime("%H:%M:%S")
-            perform_check(timestamp)
+            perform_check(timestamp, cnt)
             time.sleep(cfm.config["INTERVAL"])
         except Exception as e:
             print(f"Error during monitoring: {traceback_str(e)}")
             small_sleep(5)
+        finally:
+            cnt = (cnt + 1) % 1000000007
 
 
 if __name__ == "__main__":
