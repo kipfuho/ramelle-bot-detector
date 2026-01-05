@@ -11,6 +11,7 @@ import sys
 import signal
 from threading import Event
 from helper import ConfigManager, traceback_str, resource_path
+import gc
 
 DEFAULT_CONFIG = {
     "INTERVAL": 5,
@@ -90,34 +91,44 @@ def notify(message):
 
 def perform_check(timestamp):
     global cookbot, curse
-    with mss.mss() as sct:
-        monitor = sct.monitors[1] 
-        screenshot = np.array(sct.grab(monitor))
-        gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
-        
-        res = cv2.matchTemplate(gray_img, cookbot_template, cv2.TM_CCOEFF_NORMED)
-        loc = np.where(res >= threshold)
-        if len(loc[0]) > 0:
-            print(f"{timestamp} [ALERT] Cookbot detected!")
-            if not cookbot:
-                if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
-                    keyboard.press_and_release(cfm.config['SPAM_KEY'])
-                notify(f"Time: {timestamp}\nCookbot detected!")
-                cookbot = True
-            return
+    try:
+        with mss.mss() as sct:
+            monitor = sct.monitors[1] 
+            sct_img = sct.grab(monitor)
+            screenshot = np.array(sct_img)
+            gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
+            del sct_img, screenshot
 
-        res2 = cv2.matchTemplate(gray_img, curse_template, cv2.TM_CCOEFF_NORMED)
-        loc2 = np.where(res2 >= threshold)
-        if len(loc2[0]) > 0:
-            print(f"{timestamp} [ALERT] Curse detected!")
-            if not curse:
-                notify(f"Time: {timestamp}\nCurse detected!")
-                curse = True
-            return
+            res = cv2.matchTemplate(gray_img, cookbot_template, cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= threshold)
+            if len(loc[0]) > 0:
+                print(f"{timestamp} [ALERT] Cookbot detected!")
+                if not cookbot:
+                    if cfm.config['ENABLE_AUTOHOTKEY'] and cfm.config['SPAM_KEY']:
+                        keyboard.press_and_release(cfm.config['SPAM_KEY'])
+                    notify(f"Time: {timestamp}\nCookbot detected!")
+                    cookbot = True
+                del res, gray_img
+                return
 
-        print(f"{timestamp} [SAFE] Scanning...")
-        cookbot = False
-        curse = False
+            res2 = cv2.matchTemplate(gray_img, curse_template, cv2.TM_CCOEFF_NORMED)
+            loc2 = np.where(res2 >= threshold)
+            if len(loc2[0]) > 0:
+                print(f"{timestamp} [ALERT] Curse detected!")
+                if not curse:
+                    notify(f"Time: {timestamp}\nCurse detected!")
+                    curse = True
+                del res2, gray_img
+                return
+
+            print(f"{timestamp} [SAFE] Scanning...")
+            cookbot = False
+            curse = False
+            del res, res2, gray_img
+    except Exception as e:
+        print(f"Check Error: {traceback_str(e)}")
+    finally:
+        gc.collect() 
 
 def main_loop():
     while True:
