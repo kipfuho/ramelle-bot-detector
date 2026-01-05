@@ -1,36 +1,18 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
-
 a = Analysis(
     ['index.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        ('cookbot_reference.png', '.'), 
+        ('curse_reference.png', '.')
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludeexcludes=[
-        'matplotlib',
-        'scipy',
-        'pandas',
-        'notebook',
-        'jupyter',
-        'IPython',
-        'tkinter',
-        'PyQt5',
-        'PySide2',
-        'wx',
-        'plotly',
-        'bokeh',
-        'seaborn',
-        'sqlalchemy',
-        'flask',
-        'django',
-        'pytest',
-        'setuptools',
-    ],
+    excludes=[],
     noarchive=False,
     optimize=0,
 )

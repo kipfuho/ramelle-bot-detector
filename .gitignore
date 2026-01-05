@@ -4,3 +4,4 @@ build
 dist
 easyocr_models
 config.json
+*.exe

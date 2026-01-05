@@ -199,8 +199,8 @@ HoldKeyAndSleep(key, holdDurationInMs, sleepDurationInMs := 0) {
 }
 
 AutoFarm() {
-    SpamKey("2", 300)	; Buff key
-    SpamKey("q", 30000)	; Attack key
+    SpamKey("2", 600)	; Buff key
+    SpamKey("wq", 28000)	; Attack key
 }
 
 DoSlime() {
@@ -242,15 +242,15 @@ DoKaling() {
     ClickAndSleep(x2, y2, 9000)
     ; bird
     SpamKey("2", 300) ; good buff with low cd (in my case divine echo)
-    SpamKey("q", 32000, 1000) ; attack 26s, change this based on your dmg
+    SpamKey("q", 28000, 1000) ; attack 26s, change this based on your dmg
     ; cat
     SpamKey("2", 300)
-    SpamKey("q", 30000, 10000)
+    SpamKey("q", 22000, 12000)
     ; fish
     SpamKey("2", 300)
     SpamKey("q", 28000)
     SpamKey("2", 800)
-    SpamKey("q", 24000, 1000)
+    SpamKey("q", 17000, 1000)
     ; skip the rest 2 phases, too inconsistent
     HoldKeyAndSleep("{Left}", 500)
     SpamKey("{Space}", 2500, 800)
