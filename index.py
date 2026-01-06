@@ -19,7 +19,7 @@ DEFAULT_CONFIG = {
     "TO_EMAIL": "xxx@gmail.com",
     "FROM_EMAIL": "xxx@gmail.com",
     "EMAIL_PASSWORD": "xxxx xxxx xxxx xxxx",  # https://myaccount.google.com/apppasswords
-    "ENABLE_AUTOHOTKEY": True,  # for AutoHotKey (spammingQ.ahk).
+    "ENABLE_AUTOHOTKEY": True,  # for AutoHotKey (remelle_macro.ahk).
     "SPAM_KEY": "[+1",  # for AutoHotKey (remelle_macro.ahk).
 }
 
@@ -65,6 +65,8 @@ def signal_handler(signum, frame):
 
 
 def notify(message):
+    if not cfm.config["ENABLE_EMAIL"]:
+        return False
     try:
         msg = MIMEMultipart()
         msg["From"] = cfm.config["FROM_EMAIL"]

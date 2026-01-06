@@ -1,7 +1,6 @@
 ﻿#Requires AutoHotkey v2.0
 #SingleInstance Force
 
-global showingHelpTooltip := false
 global running := false
 
 ; farming
@@ -17,14 +16,9 @@ global symbolIndex := 1
 
 ; help menu
 ~[:: {
-    global showingHelpTooltip, autoFarmRunning, autoSlimeRunning, autoBoxRunning, autoKalingRunning, isAuthenticSymbol, symbolIndex
-    if showingHelpTooltip
-        return
-
-    showingHelpTooltip := true
+    global autoFarmRunning, autoSlimeRunning, autoBoxRunning, autoKalingRunning, isAuthenticSymbol, symbolIndex
 
     status := ""
-
     if autoFarmRunning
         status .= "Auto Farm`n"
     if autoSlimeRunning
@@ -55,11 +49,7 @@ global symbolIndex := 1
         )
 
     ToolTip(tooltipText)
-
-    SetTimer(() => (
-        ToolTip(),
-        showingHelpTooltip := false
-    ), -2000)
+    SetTimer () => ToolTip(), -800
 }
 
 ; auto farm
@@ -299,3 +289,6 @@ AutoSymbol() {
     ClickAndSleep(x2, y2, 300)
     ClickAndSleep(x3, y3, 1500)
 }
+
+; ================= EXIT =================
+~Esc & F12::ExitApp
