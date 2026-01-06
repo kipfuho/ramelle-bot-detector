@@ -144,6 +144,8 @@ def perform_check(timestamp, current_count):
             else:
                 print(f"✓ No issues detected.")
                 for temp in reference_templates:
+                    if current_count % temp["interval_multiplier"] != 0:
+                        continue
                     temp["detected"] = False
     except Exception as e:
         print(f"Check Error: {traceback_str(e)}")
