@@ -88,10 +88,11 @@ def notify(message):
 reference_templates = [
     {
         "name": "Cookbot",
-        "image": cv2.imread(resource_path("cookbot_reference.png"), 0),
+        "image": cv2.imread(resource_path("images/cookbot_reference.png"), 0),
         "threshold": 0.8,
         "interval_multiplier": 1,
         "detected": False,
+        "exclusive": False,
         "extra": lambda: (
             keyboard.press_and_release(cfm.config["SPAM_KEY"])
             if cfm.config["ENABLE_AUTOHOTKEY"] and cfm.config["SPAM_KEY"]
@@ -100,19 +101,30 @@ reference_templates = [
     },
     {
         "name": "Curse",
-        "image": cv2.imread(resource_path("curse_reference.png"), 0),
+        "image": cv2.imread(resource_path("images/curse_reference.png"), 0),
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
+        "exclusive": False,
         "extra": lambda: None,
     },
     {
         "name": "Dead",
-        "image": cv2.imread(resource_path("dead_reference.png"), 0),
+        "image": cv2.imread(resource_path("images/dead_reference.png"), 0),
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
+        "exclusive": False,
         "extra": lambda: None,
+    },
+    {
+        "name": "Out game",
+        "image": cv2.imread(resource_path("images/level_reference.png"), 0),
+        "threshold": 0.9,
+        "interval_multiplier": 10,
+        "detected": False,
+        "exclusive": True,
+        "extra": lambda: (pause_event.clear(), print("⏸️  PAUSED")),
     },
 ]
 
@@ -133,7 +145,9 @@ def perform_check(timestamp, current_count):
                 threshold = temp["threshold"]
                 res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
                 loc = np.where(res >= threshold)
-                if len(loc[0]) > 0:
+                if (len(loc[0]) > 0 and not temp["exclusive"]) or (
+                    len(loc[0]) == 0 and temp["exclusive"]
+                ):
                     print(f"✗ {temp['name']} detected!")
                     if not temp["detected"]:
                         temp["extra"]()
