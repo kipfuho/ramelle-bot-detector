@@ -63,6 +63,12 @@ def is_process_running(process_name):
     return False
 
 
+def write_log(message):
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("bot_log.txt", "a", encoding="utf-8") as f:
+        f.write(f"[{timestamp}] {message}\n")
+
+
 def notify(message):
     if not cfm.config["ENABLE_EMAIL"]:
         return False
@@ -93,7 +99,7 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 1,
         "detected": False,
-        "last_detected": 0,
+        "last_clear_at": 0,
         "exclusive": False,
         "extra": lambda: (
             keyboard.press_and_release(cfm.config["SPAM_KEY"])
@@ -107,7 +113,7 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
-        "last_detected": 0,
+        "last_clear_at": 0,
         "exclusive": False,
         "extra": lambda: None,
     },
@@ -117,7 +123,7 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
-        "last_detected": 0,
+        "last_clear_at": 0,
         "exclusive": False,
         "extra": lambda: None,
     },
@@ -139,7 +145,7 @@ special_checks = [
         # rune will also no longer trigger curse
         # average 40m between each curse, we can safely assume it's bugged if > 1 hour has passed since last curse
         "check": lambda *args: (
-            (args[0] - reference_templates[1]["last_detected"]) * cfm.config["INTERVAL"]
+            (args[0] - reference_templates[1]["last_clear_at"]) * cfm.config["INTERVAL"]
             > 3600
         ),
         "extra": lambda: None,
@@ -161,7 +167,7 @@ def perform_check(timestamp, current_count):
                     notify(f"Time: {timestamp}\n{special['name']} detected!")
                     special["detected"] = True
                 return
-            else:
+            elif special["detected"]:
                 special["detected"] = False
 
         monitor = sct_instance.monitors[1]
@@ -183,13 +189,20 @@ def perform_check(timestamp, current_count):
             ):
                 print(f"✗ {temp['name']} detected!")
                 if not temp["detected"]:
+                    write_log(
+                        f"Detected {temp['name']}: cnt={current_count}, interval={cfm.config["INTERVAL"]}"
+                    )
                     temp["extra"]()
                     notify(f"Time: {timestamp}\n{temp['name']} detected!")
                     temp["detected"] = True
-                    temp["last_detected"] = current_count
                 break
-            else:
+            elif temp["detected"]:
+                write_log(
+                    f"Cleared {temp['name']}: cnt={current_count}, interval={cfm.config["INTERVAL"]}"
+                )
                 temp["detected"] = False
+                temp["last_clear_at"] = current_count
+
         else:
             print(f"✓ No issues detected.")
         del gray_img
@@ -203,8 +216,7 @@ def main_loop():
     cnt = 0
     while True:
         if not pause_event.is_set():
-            # bad responsive but low cpu usage is more important
-            pause_event.wait(timeout=1)
+            pause_event.wait(timeout=0.1)
             continue
 
         try:

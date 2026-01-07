@@ -5,3 +5,4 @@ dist
 easyocr_models
 config.json
 *.exe
+bot_log.txt
