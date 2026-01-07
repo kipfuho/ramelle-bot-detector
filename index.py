@@ -12,6 +12,8 @@ import signal
 from threading import Event
 from helper import ConfigManager, traceback_str, resource_path
 import gc
+import psutil
+
 
 DEFAULT_CONFIG = {
     "INTERVAL": 5,
@@ -23,20 +25,10 @@ DEFAULT_CONFIG = {
     "SPAM_KEY": "[+1",  # for AutoHotKey (remelle_macro.ahk).
 }
 
-stop_event = Event()
 pause_event = Event()
 pause_event.set()
 ctrl_c_count = 0
 last_ctrl_c_time = 0
-
-
-def small_sleep(seconds):
-    end_time = time.time() + seconds
-
-    while time.time() < end_time:
-        if stop_event.is_set():
-            return
-        time.sleep(0.1)
 
 
 def signal_handler(signum, frame):
@@ -50,18 +42,25 @@ def signal_handler(signum, frame):
     ctrl_c_count += 1
     last_ctrl_c_time = current_time
     if ctrl_c_count == 1:
-        stop_event.set()
         if pause_event.is_set():
             pause_event.clear()
             print("⏸️  PAUSED")
         else:
             pause_event.set()
-            stop_event.clear()
             print("▶️  RESUMED")
     elif ctrl_c_count >= 2:
         print("🛑 EXITING MONITOR")
-        stop_event.set()
         sys.exit(0)
+
+
+def is_process_running(process_name):
+    for proc in psutil.process_iter(["name"]):
+        try:
+            if process_name.lower() in proc.info["name"].lower():
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+    return False
 
 
 def notify(message):
@@ -94,6 +93,7 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 1,
         "detected": False,
+        "last_detected": 0,
         "exclusive": False,
         "extra": lambda: (
             keyboard.press_and_release(cfm.config["SPAM_KEY"])
@@ -107,6 +107,7 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
+        "last_detected": 0,
         "exclusive": False,
         "extra": lambda: None,
     },
@@ -116,17 +117,32 @@ reference_templates = [
         "threshold": 0.8,
         "interval_multiplier": 5,
         "detected": False,
+        "last_detected": 0,
         "exclusive": False,
         "extra": lambda: None,
     },
+]
+
+special_checks = [
     {
         "name": "Out game",
-        "image": cv2.imread(resource_path("images/level_reference.png"), 0),
-        "threshold": 0.9,
         "interval_multiplier": 10,
         "detected": False,
-        "exclusive": True,
+        "check": lambda *args: not is_process_running("Maplestory.exe"),
         "extra": lambda: (pause_event.clear(), print("⏸️  PAUSED")),
+    },
+    {
+        "name": "Empty mob",
+        "interval_multiplier": 30,
+        "detected": False,
+        # when a channel is bugged (mob no longer spawn)
+        # rune will also no longer trigger curse
+        # average 40m between each curse, we can safely assume it's bugged if > 1 hour has passed since last curse
+        "check": lambda *args: (
+            (args[0] - reference_templates[1]["last_detected"]) * cfm.config["INTERVAL"]
+            > 3600
+        ),
+        "extra": lambda: None,
     },
 ]
 
@@ -134,35 +150,49 @@ reference_templates = [
 def perform_check(timestamp, current_count):
     try:
         print(f"{timestamp} [INFO] Performing check...")
-        with mss.mss() as sct:
-            monitor = sct.monitors[1]
-            sct_img = sct.grab(monitor)
-            screenshot = np.array(sct_img)
-            gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
-            del sct_img, screenshot
 
-            for temp in reference_templates:
-                if current_count % temp["interval_multiplier"] != 0:
-                    continue
-                threshold = temp["threshold"]
-                res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
-                loc = np.where(res >= threshold)
-                if (len(loc[0]) > 0 and not temp["exclusive"]) or (
-                    len(loc[0]) == 0 and temp["exclusive"]
-                ):
-                    print(f"✗ {temp['name']} detected!")
-                    if not temp["detected"]:
-                        temp["extra"]()
-                        notify(f"Time: {timestamp}\n{temp['name']} detected!")
-                        temp["detected"] = True
-                    del res, gray_img
-                    break
+        for special in special_checks:
+            if current_count % special["interval_multiplier"] != 0:
+                continue
+            if special["check"](current_count):
+                print(f"✗ {special['name']} detected!")
+                if not special["detected"]:
+                    special["extra"]()
+                    notify(f"Time: {timestamp}\n{special['name']} detected!")
+                    special["detected"] = True
+                return
             else:
-                print(f"✓ No issues detected.")
-                for temp in reference_templates:
-                    if current_count % temp["interval_multiplier"] != 0:
-                        continue
-                    temp["detected"] = False
+                special["detected"] = False
+
+        monitor = sct_instance.monitors[1]
+        sct_img = sct_instance.grab(monitor)
+        screenshot = np.array(sct_img)
+        gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
+        del sct_img, screenshot
+
+        for temp in reference_templates:
+            if current_count % temp["interval_multiplier"] != 0:
+                continue
+            threshold = temp["threshold"]
+            res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
+            loc = np.where(res >= threshold)
+            del res
+
+            if (len(loc[0]) > 0 and not temp["exclusive"]) or (
+                len(loc[0]) == 0 and temp["exclusive"]
+            ):
+                print(f"✗ {temp['name']} detected!")
+                if not temp["detected"]:
+                    temp["extra"]()
+                    notify(f"Time: {timestamp}\n{temp['name']} detected!")
+                    temp["detected"] = True
+                    temp["last_detected"] = current_count
+                break
+            else:
+                temp["detected"] = False
+        else:
+            print(f"✓ No issues detected.")
+        del gray_img
     except Exception as e:
         print(f"Check Error: {traceback_str(e)}")
     finally:
@@ -173,7 +203,8 @@ def main_loop():
     cnt = 0
     while True:
         if not pause_event.is_set():
-            small_sleep(5)
+            # bad responsive but low cpu usage is more important
+            pause_event.wait(timeout=1)
             continue
 
         try:
@@ -182,15 +213,15 @@ def main_loop():
             time.sleep(cfm.config["INTERVAL"])
         except Exception as e:
             print(f"Error during monitoring: {traceback_str(e)}")
-            small_sleep(5)
+            time.sleep(cfm.config["INTERVAL"])
         finally:
             cnt = (cnt + 1) % 1000000007
 
 
 if __name__ == "__main__":
     cfm = ConfigManager("config.json", DEFAULT_CONFIG)
+    sct_instance = mss.mss()
     signal.signal(signal.SIGINT, signal_handler)
-    print(
-        "🛡️  Ramelle Bot Detector Started. Press Ctrl+C to pause/resume, double Ctrl+C to exit."
-    )
+    print("🛡️  Ramelle Bot Detector Started.")
+    print("Press Ctrl+C to pause/resume, double Ctrl+C to exit.\n")
     main_loop()
