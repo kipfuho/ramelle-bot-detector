@@ -43,7 +43,8 @@ global symbolIndex := 1
             \ + 0-6 : Set Auto Symbol Index (0-6)
             
             Running: " status "
-            Symbol Type: " (isAuthenticSymbol ? "Authentic" : "Arcane") "
+            Symbol Type: " (
+                isAuthenticSymbol ? "Authentic" : "Arcane") "
             Symbol Index: " symbolIndex "
             "
         )
@@ -118,7 +119,7 @@ global symbolIndex := 1
     if running && !autoSymbolRunning
         return
     running := !running
-    autoSymbolRunning := !autoSymbolRunning   
+    autoSymbolRunning := !autoSymbolRunning
 
     if running {
         SetTimer AutoSymbol, 1000
@@ -128,21 +129,21 @@ global symbolIndex := 1
 }
 
 ; config symbol type
-\ & 0::SetSymbolIndex(0)
-\ & 1::SetSymbolIndex(1)
-\ & 2::SetSymbolIndex(2)
-\ & 3::SetSymbolIndex(3)
-\ & 4::SetSymbolIndex(4)
-\ & 5::SetSymbolIndex(5)
-\ & 6::SetSymbolIndex(6)
+\ & 0:: SetSymbolIndex(0)
+\ & 1:: SetSymbolIndex(1)
+\ & 2:: SetSymbolIndex(2)
+\ & 3:: SetSymbolIndex(3)
+\ & 4:: SetSymbolIndex(4)
+\ & 5:: SetSymbolIndex(5)
+\ & 6:: SetSymbolIndex(6)
 
-SpamKey(key, durationMs, sleepDurationInMs := 0) {
+SpamKey(key, durationMs, sleepDurationInMs := 0, spamDelayInMs := 100) {
     global running
     start := A_TickCount
 
     while (running && A_TickCount - start < durationMs) {
         Send key
-        Sleep 100
+        Sleep spamDelayInMs
     }
 
     if sleepDurationInMs > 0
@@ -169,7 +170,7 @@ PressKeyAndSleep(key, sleepDurationInMs) {
     Sleep sleepDurationInMs
 }
 
-HoldKeyAndSleep(key, holdDurationInMs, sleepDurationInMs := 0) {
+HoldKeyAndSleep(key, holdDurationInMs, sleepDurationInMs := 0, spamDelayInMs := 100) {
     global running
     if !running
         return
@@ -180,7 +181,7 @@ HoldKeyAndSleep(key, holdDurationInMs, sleepDurationInMs := 0) {
     Send ("{" key " down}")
     start := A_TickCount
     while (running && A_TickCount - start < holdDurationInMs) {
-        Sleep 100
+        Sleep spamDelayInMs
     }
     Send ("{" key " up}")
 
@@ -189,8 +190,9 @@ HoldKeyAndSleep(key, holdDurationInMs, sleepDurationInMs := 0) {
 }
 
 AutoFarm() {
-    SpamKey("2", 600)	; Buff key
-    SpamKey("wq", 28000)	; Attack key
+    SpamKey("2", 600)	            ; Buff key
+    SpamKey("r", 400)	            ; Whatever key
+    SpamKey("ewq", 27500, 0, 250)	; Attack key
 }
 
 DoSlime() {
@@ -291,4 +293,4 @@ AutoSymbol() {
 }
 
 ; ================= EXIT =================
-~Esc & F12::ExitApp
+~Esc & F12:: ExitApp
