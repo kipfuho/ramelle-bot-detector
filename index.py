@@ -12,7 +12,6 @@ import signal
 from threading import Event
 from helper import ConfigManager, traceback_str, resource_path
 import gc
-import psutil
 
 
 DEFAULT_CONFIG = {
@@ -51,16 +50,6 @@ def signal_handler(signum, frame):
     elif ctrl_c_count >= 2:
         print("🛑 EXITING MONITOR")
         sys.exit(0)
-
-
-def is_process_running(process_name):
-    for proc in psutil.process_iter(["name"]):
-        try:
-            if process_name.lower() in proc.info["name"].lower():
-                return True
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-            pass
-    return False
 
 
 def write_log(message):
@@ -127,16 +116,19 @@ reference_templates = [
         "exclusive": False,
         "extra": lambda: None,
     },
+    {
+        "name": "Out game",
+        "image": cv2.imread(resource_path("images/level_reference.png"), 0),
+        "threshold": 0.8,
+        "interval_multiplier": 10,
+        "detected": False,
+        "last_clear_at": 0,
+        "exclusive": True,
+        "extra": lambda: (pause_event.clear(), print("⏸️  PAUSED")),
+    },
 ]
 
 special_checks = [
-    {
-        "name": "Out game",
-        "interval_multiplier": 10,
-        "detected": False,
-        "check": lambda *args: not is_process_running("Maplestory.exe"),
-        "extra": lambda: (pause_event.clear(), print("⏸️  PAUSED")),
-    },
     {
         "name": "Empty mob",
         "interval_multiplier": 30,
