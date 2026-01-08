@@ -5,5 +5,6 @@ You can use this to avoid bot detector
 #
 ```
 .venv\Scripts\activate
+pip install opencv-python mss keyboard pyinstaller
 pyinstaller index.spec
 ```

@@ -10,67 +10,93 @@ from email.mime.multipart import MIMEMultipart
 import sys
 import signal
 from threading import Event
-from helper import ConfigManager, traceback_str, resource_path
+from helper import ConfigManager, traceback_str, resource_path, write_log
 import gc
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 
-DEFAULT_CONFIG = {
-    "INTERVAL": 5,
-    "ENABLE_EMAIL": True,
-    "TO_EMAIL": "xxx@gmail.com",
-    "FROM_EMAIL": "xxx@gmail.com",
-    "EMAIL_PASSWORD": "xxxx xxxx xxxx xxxx",  # https://myaccount.google.com/apppasswords
-    "ENABLE_AUTOHOTKEY": True,  # for AutoHotKey (remelle_macro.ahk).
-    "SPAM_KEY": "[+1",  # for AutoHotKey (remelle_macro.ahk).
-}
+@dataclass
+class TemplateCheck:
+    name: str
+    image: cv2.typing.MatLike
+    threshold: float = 0.8
+    interval_multiplier: int = 1
+    detected: bool = False
+    last_clear_at: int = 0
+    exclusive: bool = False
+    extra: Optional[Callable[[], None]] = None
 
-pause_event = Event()
-pause_event.set()
-ctrl_c_count = 0
-last_ctrl_c_time = 0
+
+@dataclass
+class SpecialCheck:
+    name: str
+    interval_multiplier: int = 1
+    detected: bool = False
+    check: Optional[Callable[..., bool]] = None
+    extra: Optional[Callable[[], None]] = None
+
+
+def pause_program() -> None:
+    pause_event.clear()
+    print("⏸️  PAUSED")
+
+
+def resume_program() -> None:
+    pause_event.set()
+    print("▶️  RESUMED")
 
 
 def signal_handler(signum, frame):
-    global ctrl_c_count, last_ctrl_c_time
+    global last_ctrlc_ms
 
-    current_time = time.time()
+    current_time_ms = time.time() * 1000
 
-    if current_time - last_ctrl_c_time > 1:
-        ctrl_c_count = 0
-
-    ctrl_c_count += 1
-    last_ctrl_c_time = current_time
-    if ctrl_c_count == 1:
-        if pause_event.is_set():
-            pause_event.clear()
-            print("⏸️  PAUSED")
-        else:
-            pause_event.set()
-            print("▶️  RESUMED")
-    elif ctrl_c_count >= 2:
+    if current_time_ms - last_ctrlc_ms < 1000:
         print("🛑 EXITING MONITOR")
         sys.exit(0)
 
+    last_ctrlc_ms = current_time_ms
+    if pause_event.is_set():
+        pause_program()
+    else:
+        resume_program()
 
-def write_log(message):
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open("bot_log.txt", "a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
+
+def load_template(path: str) -> cv2.typing.MatLike:
+    img = cv2.imread(resource_path(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise FileNotFoundError(path)
+    return img
+
+
+def cookbot_extra():
+    if cfm.config.enable_autohotkey and cfm.config.spam_key:
+        keyboard.press_and_release(cfm.config.spam_key)
+
+
+def empty_mob_check(*args):
+    # when a channel is bugged (mob no longer spawn)
+    # rune will also no longer trigger curse
+    # average 30m between each curse, we can safely assume it's bugged if > 35m has passed since last curse
+    total_count_since_last_curse = args[0] - template_checks[1].last_clear_at
+    return total_count_since_last_curse * cfm.config.interval > 2100
 
 
 def notify(message):
-    if not cfm.config["ENABLE_EMAIL"]:
+    if not cfm.config.enable_email:
         return False
+
     try:
         msg = MIMEMultipart()
-        msg["From"] = cfm.config["FROM_EMAIL"]
-        msg["To"] = cfm.config["TO_EMAIL"]
+        msg["From"] = cfm.config.from_email
+        msg["To"] = cfm.config.to_email
         msg["Subject"] = "Ramelle Monitor Alert: Text Changed"
         msg.attach(MIMEText(message, "plain"))
 
         server = smtplib.SMTP("smtp.gmail.com", 587)
         server.starttls()
-        server.login(cfm.config["FROM_EMAIL"], cfm.config["EMAIL_PASSWORD"])
+        server.login(cfm.config.from_email, cfm.config.email_password)
         server.send_message(msg)
         server.quit()
 
@@ -81,86 +107,23 @@ def notify(message):
         return False
 
 
-reference_templates = [
-    {
-        "name": "Cookbot",
-        "image": cv2.imread(resource_path("images/cookbot_reference.png"), 0),
-        "threshold": 0.8,
-        "interval_multiplier": 1,
-        "detected": False,
-        "last_clear_at": 0,
-        "exclusive": False,
-        "extra": lambda: (
-            keyboard.press_and_release(cfm.config["SPAM_KEY"])
-            if cfm.config["ENABLE_AUTOHOTKEY"] and cfm.config["SPAM_KEY"]
-            else None
-        ),
-    },
-    {
-        "name": "Curse",
-        "image": cv2.imread(resource_path("images/curse_reference.png"), 0),
-        "threshold": 0.8,
-        "interval_multiplier": 5,
-        "detected": False,
-        "last_clear_at": 0,
-        "exclusive": False,
-        "extra": lambda: None,
-    },
-    {
-        "name": "Dead",
-        "image": cv2.imread(resource_path("images/dead_reference.png"), 0),
-        "threshold": 0.8,
-        "interval_multiplier": 5,
-        "detected": False,
-        "last_clear_at": 0,
-        "exclusive": False,
-        "extra": lambda: None,
-    },
-    {
-        "name": "Out game",
-        "image": cv2.imread(resource_path("images/level_reference.png"), 0),
-        "threshold": 0.8,
-        "interval_multiplier": 10,
-        "detected": False,
-        "last_clear_at": 0,
-        "exclusive": True,
-        "extra": lambda: (pause_event.clear(), print("⏸️  PAUSED")),
-    },
-]
-
-special_checks = [
-    {
-        "name": "Empty mob",
-        "interval_multiplier": 30,
-        "detected": False,
-        # when a channel is bugged (mob no longer spawn)
-        # rune will also no longer trigger curse
-        # average 40m between each curse, we can safely assume it's bugged if > 1 hour has passed since last curse
-        "check": lambda *args: (
-            (args[0] - reference_templates[1]["last_clear_at"]) * cfm.config["INTERVAL"]
-            > 3600
-        ),
-        "extra": lambda: None,
-    },
-]
-
-
-def perform_check(timestamp, current_count):
+def perform_check(timestamp, cnt):
     try:
-        print(f"{timestamp} [INFO] Performing check...")
+        print(f"{timestamp} [INFO] Performing check {cnt}...")
 
         for special in special_checks:
-            if current_count % special["interval_multiplier"] != 0:
+            if cnt % special.interval_multiplier != 0:
                 continue
-            if special["check"](current_count):
-                print(f"✗ {special['name']} detected!")
-                if not special["detected"]:
-                    special["extra"]()
-                    notify(f"Time: {timestamp}\n{special['name']} detected!")
-                    special["detected"] = True
+            if special.check and special.check(cnt):
+                print(f"✗ {special.name} detected!")
+                if not special.detected:
+                    if special.extra:
+                        special.extra()
+                    notify(f"Time: {timestamp}\n{special.name} detected!")
+                    special.detected = True
                 return
-            elif special["detected"]:
-                special["detected"] = False
+            elif special.detected:
+                special.detected = False
 
         monitor = sct_instance.monitors[1]
         sct_img = sct_instance.grab(monitor)
@@ -168,32 +131,31 @@ def perform_check(timestamp, current_count):
         gray_img = cv2.cvtColor(screenshot, cv2.COLOR_BGRA2GRAY)
         del sct_img, screenshot
 
-        for temp in reference_templates:
-            if current_count % temp["interval_multiplier"] != 0:
+        for template in template_checks:
+            if cnt % template.interval_multiplier != 0:
                 continue
-            threshold = temp["threshold"]
-            res = cv2.matchTemplate(gray_img, temp["image"], cv2.TM_CCOEFF_NORMED)
-            loc = np.where(res >= threshold)
+            threshold = template.threshold
+            res = cv2.matchTemplate(gray_img, template.image, cv2.TM_CCOEFF_NORMED)
+            is_match = len(np.where(res >= threshold)[0]) > 0
             del res
 
-            if (len(loc[0]) > 0 and not temp["exclusive"]) or (
-                len(loc[0]) == 0 and temp["exclusive"]
-            ):
-                print(f"✗ {temp['name']} detected!")
-                if not temp["detected"]:
+            if is_match ^ template.exclusive:
+                print(f"✗ {template.name} detected!")
+                if not template.detected:
                     write_log(
-                        f"Detected {temp['name']}: cnt={current_count}, interval={cfm.config["INTERVAL"]}"
+                        f"Detected {template.name}: cnt={cnt}, interval={cfm.config.interval}"
                     )
-                    temp["extra"]()
-                    notify(f"Time: {timestamp}\n{temp['name']} detected!")
-                    temp["detected"] = True
+                    if template.extra:
+                        template.extra()
+                    notify(f"Time: {timestamp}\n{template.name} detected!")
+                    template.detected = True
                 break
-            elif temp["detected"]:
+            elif template.detected:
                 write_log(
-                    f"Cleared {temp['name']}: cnt={current_count}, interval={cfm.config["INTERVAL"]}"
+                    f"Cleared {template.name}: cnt={cnt}, interval={cfm.config.interval}"
                 )
-                temp["detected"] = False
-                temp["last_clear_at"] = current_count
+                template.detected = False
+                template.last_clear_at = cnt
 
         else:
             print(f"✓ No issues detected.")
@@ -214,17 +176,52 @@ def main_loop():
         try:
             timestamp = datetime.now().strftime("%H:%M:%S")
             perform_check(timestamp, cnt)
-            time.sleep(cfm.config["INTERVAL"])
+            time.sleep(cfm.config.interval)
         except Exception as e:
             print(f"Error during monitoring: {traceback_str(e)}")
-            time.sleep(cfm.config["INTERVAL"])
+            time.sleep(cfm.config.interval)
         finally:
             cnt = (cnt + 1) % 1000000007
 
 
 if __name__ == "__main__":
-    cfm = ConfigManager("config.json", DEFAULT_CONFIG)
+    # Init some data
+    cfm = config_manager = ConfigManager()
     sct_instance = mss.mss()
+    pause_event = Event()
+    pause_event.set()
+    last_ctrlc_ms = 0
+    template_checks = [
+        TemplateCheck(
+            name="Cookbot",
+            image=load_template("images/cookbot_reference.png"),
+            extra=cookbot_extra,
+        ),
+        TemplateCheck(
+            name="Curse",
+            image=load_template("images/curse_reference.png"),
+            interval_multiplier=5,
+        ),
+        TemplateCheck(
+            name="Dead",
+            image=load_template("images/dead_reference.png"),
+            interval_multiplier=5,
+        ),
+        TemplateCheck(
+            name="Out game",
+            image=load_template("images/level_reference.png"),
+            interval_multiplier=10,
+            exclusive=True,
+            extra=pause_program,
+        ),
+    ]
+    special_checks = [
+        SpecialCheck(
+            name="Empty mob",
+            interval_multiplier=30,
+            check=empty_mob_check,
+        ),
+    ]
     signal.signal(signal.SIGINT, signal_handler)
     print("🛡️  Ramelle Bot Detector Started.")
     print("Press Ctrl+C to pause/resume, double Ctrl+C to exit.\n")

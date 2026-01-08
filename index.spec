@@ -7,7 +7,8 @@ a = Analysis(
     datas=[
         ('images/cookbot_reference.png', 'images'), 
         ('images/curse_reference.png', 'images'),
-        ('images/dead_reference.png', 'images')
+        ('images/dead_reference.png', 'images'),
+        ('images/level_reference.png', 'images'),
     ],
     hiddenimports=[],
     hookspath=[],
