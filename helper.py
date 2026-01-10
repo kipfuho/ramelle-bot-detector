@@ -6,6 +6,7 @@ from dataclasses import dataclass, asdict
 from typing import Type
 import traceback
 from datetime import datetime
+import shutil
 
 
 def traceback_str(e: Exception):
@@ -63,13 +64,7 @@ class ConfigManager:
             try:
                 with open(self.config_path, "r", encoding="utf-8") as f:
                     raw = json.load(f)
-                self.config = self.config_cls(
-                    **{
-                        k: v
-                        for k, v in raw.items()
-                        if k in self.config_cls.__dataclass_fields__
-                    }
-                )
+                self.config = self.config_cls(**{k: v for k, v in raw.items()})
                 print(f"✓ Configuration loaded from {self.config_path}")
                 return self.config
             except Exception as e:
@@ -78,14 +73,25 @@ class ConfigManager:
 
         # Fallback to defaults
         self.config = self.config_cls()
-        self.save()
+        self.save(backup=self.config_path.exists())
         return self.config
 
-    def save(self):
+    def save(self, backup=False):
         """Saves the current state of self.config to disk."""
+        if backup:
+            self.backup()
         try:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(asdict(self.config), f, indent=4)
             print(f"✓ Configuration saved to {self.config_path}")
         except Exception as e:
             print(f"✗ Error saving config: {traceback_str(e)}")
+
+    def backup(self):
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_path = f"{self.config_path}.{timestamp}.bak"
+            shutil.copy2(self.config_path, backup_path)
+            print(f"✓ Backup created at {backup_path}")
+        except Exception as e:
+            print(f"✗ Error backup config: {traceback_str(e)}")
