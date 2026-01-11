@@ -1,0 +1,42 @@
+# -*- mode: python ; coding: utf-8 -*-
+
+a = Analysis(
+    ['index.py'],
+    pathex=[],
+    binaries=[],
+    datas=[
+        ('images_1080p/cookbot_reference.png', 'images'), 
+        ('images_1080p/curse_reference.png', 'images'),
+        ('images_1080p/dead_reference.png', 'images'),
+        ('images_1080p/level_reference.png', 'images'),
+    ],
+    hiddenimports=[],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    optimize=0,
+)
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name='ramelle_bot_detector',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)

@@ -3,7 +3,7 @@ import sys
 import json
 from pathlib import Path
 from dataclasses import dataclass, asdict
-from typing import Type
+from typing import Type, Optional, List
 import traceback
 from datetime import datetime
 import shutil
@@ -34,12 +34,21 @@ def resource_path(relative_path):
 @dataclass
 class Config:
     interval: int = 5
+    # Email notifications
     enable_email: bool = False
     to_email: str = "xxx@gmail.com"
     from_email: str = "xxx@gmail.com"
     email_password: str = "xxxx xxxx xxxx xxxx"
+    # AutoHotkey
     enable_autohotkey: bool = False
     spam_key: str = "[+1"
+    # ntfy notifications
+    enable_ntfy: bool = False
+    ntfy_topic: str = "my-alerts"
+    ntfy_server: str = "https://ntfy.sh"
+    ntfy_priority: int = 3
+    ntfy_tags: Optional[List[str]] = None
+    ntfy_auth_token: Optional[str] = None
 
 
 class ConfigManager:
@@ -66,6 +75,7 @@ class ConfigManager:
                     raw = json.load(f)
                 self.config = self.config_cls(**{k: v for k, v in raw.items()})
                 print(f"✓ Configuration loaded from {self.config_path}")
+                self.save()
                 return self.config
             except Exception as e:
                 print(f"⚠ Error loading config: {traceback_str(e)}")

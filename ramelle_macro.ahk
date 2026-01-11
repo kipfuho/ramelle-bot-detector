@@ -232,17 +232,10 @@ DoKaling() {
     SpamKey("1", 200) ; potion
     ClickAndSleep(x1, y1, 800)
     ClickAndSleep(x2, y2, 9000)
-    ; bird
-    SpamKey("2", 300) ; good buff with low cd (in my case divine echo)
-    SpamKey("q", 28000, 1000) ; attack 26s, change this based on your dmg
-    ; cat
-    SpamKey("2", 300)
-    SpamKey("q", 22000, 12000)
-    ; fish
-    SpamKey("2", 300)
-    SpamKey("q", 28000)
-    SpamKey("2", 800)
-    SpamKey("q", 17000, 1000)
+    ; bossing
+    AutoFarm()
+    AutoFarm()
+    AutoFarm()
     ; skip the rest 2 phases, too inconsistent
     HoldKeyAndSleep("{Left}", 500)
     SpamKey("{Space}", 2500, 800)
@@ -268,9 +261,9 @@ AutoSymbol() {
 
     key := ""
     if isAuthenticSymbol
-        key := "{Delete}"
+        key := "{Delete}"   ; insert authentic symbol selectors at Delete
     else
-        key := "{Insert}"
+        key := "{Insert}"   ; insert arcane symbol selectors at Insert
 
     SpamKey(key, 800, 300)
     for i, v in [1, 2, 3, 4, 5, 6] {

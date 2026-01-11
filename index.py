@@ -14,6 +14,7 @@ from helper import ConfigManager, traceback_str, resource_path, write_log
 import gc
 from dataclasses import dataclass
 from typing import Callable, Optional
+import requests
 
 
 @dataclass
@@ -83,7 +84,29 @@ def empty_mob_check(*args):
     return total_count_since_last_curse * cfm.config.interval > 2100
 
 
-def notify(message):
+def send_ntfy(message: str, title: str = "Ramelle Alert: Bad thing detected"):
+    if not cfm.config.enable_ntfy:
+        return False
+
+    try:
+        url = f"{cfm.config.ntfy_server.rstrip('/')}/{cfm.config.ntfy_topic}"
+
+        headers = {"Priority": str(cfm.config.ntfy_priority), "Title": title}
+        if cfm.config.ntfy_tags:
+            headers["Tags"] = ",".join(cfm.config.ntfy_tags)
+
+        if cfm.config.ntfy_auth_token:
+            headers["Authorization"] = f"Bearer {cfm.config.ntfy_auth_token}"
+
+        print(f"✓ Notify successfully at {datetime.now().strftime('%H:%M:%S')}")
+        requests.post(url, data=message.encode("utf-8"), headers=headers, timeout=5)
+        return True
+    except Exception as e:
+        print(f"✗ Notify failed: {traceback_str(e)}")
+        return False
+
+
+def send_email(message: str, subject: str = "Ramelle Alert: Bad thing detected"):
     if not cfm.config.enable_email:
         return False
 
@@ -91,7 +114,7 @@ def notify(message):
         msg = MIMEMultipart()
         msg["From"] = cfm.config.from_email
         msg["To"] = cfm.config.to_email
-        msg["Subject"] = "Ramelle Monitor Alert: Text Changed"
+        msg["Subject"] = subject
         msg.attach(MIMEText(message, "plain"))
 
         server = smtplib.SMTP("smtp.gmail.com", 587)
@@ -105,6 +128,13 @@ def notify(message):
     except Exception as e:
         print(f"✗ Email failed: {traceback_str(e)}")
         return False
+
+
+def notify(message):
+    if send_ntfy(message):
+        return
+    if send_email(message):
+        return
 
 
 def perform_check(timestamp, cnt):
